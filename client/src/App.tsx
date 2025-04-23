@@ -17,7 +17,7 @@ import FormSubmissionSuccess from "./pages/FormSubmissionSuccess";
 
 function Router() {
   // Get the current location to determine if we're on a public route
-  const [location] = (window as any).useLocation ? (window as any).useLocation() : ['/']; 
+  const [location] = useLocation();
   const isPublicRoute = location.startsWith('/public/') || location === '/forms/success';
 
   // Public routes don't show the admin UI (header and sidebar)
