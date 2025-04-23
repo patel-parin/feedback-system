@@ -4,6 +4,8 @@ import {
   formResponses, type FormResponse, type InsertFormResponse
 } from "@shared/schema";
 import { randomBytes } from "crypto";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -31,204 +33,122 @@ export interface IStorage {
   getFormStats(formId: number): Promise<any>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private formTemplatesMap: Map<number, FormTemplate>;
-  private formResponsesMap: Map<number, FormResponse>;
-  private userIdCounter: number;
-  private formTemplateIdCounter: number;
-  private formResponseIdCounter: number;
+// Helper to generate a unique hash for form access
+function generateAccessHash(): string {
+  return randomBytes(16).toString('hex');
+}
 
-  constructor() {
-    this.users = new Map();
-    this.formTemplatesMap = new Map();
-    this.formResponsesMap = new Map();
-    this.userIdCounter = 1;
-    this.formTemplateIdCounter = 1;
-    this.formResponseIdCounter = 1;
-    
-    // Initialize with default admin user
-    this.createUser({
-      username: "admin",
-      password: "admin123",
-      isAdmin: true
-    });
-    
-    // Create a sample form template
-    this.createFormTemplate({
-      title: "Customer Satisfaction Survey",
-      description: "Please help us improve our services by completing this short survey.",
-      createdBy: 1,
-      fields: [
-        {
-          id: "name",
-          label: "Your Name",
-          type: "text",
-          required: true,
-          placeholder: "Enter your full name"
-        },
-        {
-          id: "email",
-          label: "Email Address",
-          type: "email",
-          required: true,
-          placeholder: "your.email@example.com"
-        },
-        {
-          id: "satisfaction",
-          label: "How satisfied are you with our service?",
-          type: "radio",
-          required: true,
-          options: ["Very Satisfied", "Satisfied", "Neutral", "Dissatisfied", "Very Dissatisfied"]
-        },
-        {
-          id: "usage",
-          label: "How often do you use our product/service?",
-          type: "select",
-          required: true,
-          options: ["Daily", "Weekly", "Monthly", "Rarely", "First time"]
-        },
-        {
-          id: "feedback",
-          label: "Any additional feedback or suggestions?",
-          type: "textarea",
-          required: false,
-          placeholder: "Share your thoughts with us..."
-        }
-      ],
-      active: true
-    });
-    
-    // Add a sample response to the form
-    this.createFormResponse({
-      formId: 1,
-      respondent: "John Doe",
-      email: "john.doe@example.com",
-      responses: {
-        name: "John Doe",
-        email: "john.doe@example.com",
-        satisfaction: "Satisfied",
-        usage: "Weekly",
-        feedback: "Your customer service team is excellent!"
-      }
-    });
-  }
-
-  // Helper to generate a unique hash for form access
-  private generateAccessHash(): string {
-    return randomBytes(16).toString('hex');
-  }
-
-  // User methods
+export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userIdCounter++;
-    const user: User = { 
-      ...insertUser, 
-      id,
-      isAdmin: insertUser.isAdmin ?? false
-    };
-    this.users.set(id, user);
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
     return user;
   }
   
-  // Form template methods
   async getAllFormTemplates(): Promise<FormTemplate[]> {
-    return Array.from(this.formTemplatesMap.values());
+    return await db.select().from(formTemplates);
   }
   
   async getFormTemplateById(id: number): Promise<FormTemplate | undefined> {
-    return this.formTemplatesMap.get(id);
+    const [template] = await db.select().from(formTemplates).where(eq(formTemplates.id, id));
+    return template;
   }
   
   async getFormTemplateByHash(accessHash: string): Promise<FormTemplate | undefined> {
-    return Array.from(this.formTemplatesMap.values()).find(
-      (template) => template.accessHash === accessHash
-    );
+    const [template] = await db.select().from(formTemplates).where(eq(formTemplates.accessHash, accessHash));
+    return template;
   }
   
   async getFormTemplatesByCreator(creatorId: number): Promise<FormTemplate[]> {
-    return Array.from(this.formTemplatesMap.values()).filter(
-      (template) => template.createdBy === creatorId
-    );
+    return await db.select().from(formTemplates).where(eq(formTemplates.createdBy, creatorId));
   }
   
   async createFormTemplate(templateData: Omit<InsertFormTemplate, "accessHash">): Promise<FormTemplate> {
-    const id = this.formTemplateIdCounter++;
-    const accessHash = this.generateAccessHash();
-    const createdAt = new Date();
+    const accessHash = generateAccessHash();
     
-    const template: FormTemplate = {
-      ...templateData, 
-      id,
-      accessHash,
-      createdAt,
-      createdBy: templateData.createdBy ?? null,
-      active: templateData.active ?? true
-    };
-    
-    this.formTemplatesMap.set(id, template);
+    const [template] = await db
+      .insert(formTemplates)
+      .values({
+        ...templateData,
+        accessHash
+      })
+      .returning();
+      
     return template;
   }
   
   async updateFormTemplate(id: number, updates: Partial<InsertFormTemplate>): Promise<FormTemplate | undefined> {
-    const template = this.formTemplatesMap.get(id);
-    if (!template) return undefined;
-    
-    const updatedTemplate = { ...template, ...updates };
-    this.formTemplatesMap.set(id, updatedTemplate);
+    const [updatedTemplate] = await db
+      .update(formTemplates)
+      .set(updates)
+      .where(eq(formTemplates.id, id))
+      .returning();
+      
     return updatedTemplate;
   }
   
   async deleteFormTemplate(id: number): Promise<boolean> {
-    return this.formTemplatesMap.delete(id);
+    try {
+      const [deletedTemplate] = await db
+        .delete(formTemplates)
+        .where(eq(formTemplates.id, id))
+        .returning({ id: formTemplates.id });
+        
+      return !!deletedTemplate;
+    } catch (error) {
+      console.error("Error deleting form template:", error);
+      return false;
+    }
   }
   
-  // Form response methods
   async getAllFormResponses(): Promise<FormResponse[]> {
-    return Array.from(this.formResponsesMap.values());
+    return await db.select().from(formResponses);
   }
   
   async getFormResponseById(id: number): Promise<FormResponse | undefined> {
-    return this.formResponsesMap.get(id);
+    const [response] = await db.select().from(formResponses).where(eq(formResponses.id, id));
+    return response;
   }
   
   async getFormResponsesByForm(formId: number): Promise<FormResponse[]> {
-    return Array.from(this.formResponsesMap.values()).filter(
-      (response) => response.formId === formId
-    );
+    return await db.select().from(formResponses).where(eq(formResponses.formId, formId));
   }
   
   async createFormResponse(responseData: InsertFormResponse): Promise<FormResponse> {
-    const id = this.formResponseIdCounter++;
-    const submittedAt = new Date();
-    
-    const response: FormResponse = {
-      ...responseData,
-      id,
-      submittedAt,
-      formId: responseData.formId ?? null,
-      email: responseData.email ?? null
-    };
-    
-    this.formResponsesMap.set(id, response);
+    const [response] = await db
+      .insert(formResponses)
+      .values(responseData)
+      .returning();
+      
     return response;
   }
   
   async deleteFormResponse(id: number): Promise<boolean> {
-    return this.formResponsesMap.delete(id);
+    try {
+      const [deletedResponse] = await db
+        .delete(formResponses)
+        .where(eq(formResponses.id, id))
+        .returning({ id: formResponses.id });
+        
+      return !!deletedResponse;
+    } catch (error) {
+      console.error("Error deleting form response:", error);
+      return false;
+    }
   }
   
-  // Statistics
   async getFormStats(formId: number): Promise<any> {
     const responses = await this.getFormResponsesByForm(formId);
     const template = await this.getFormTemplateById(formId);
@@ -314,4 +234,5 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Initialize database storage
+export const storage = new DatabaseStorage();
