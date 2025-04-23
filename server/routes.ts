@@ -161,8 +161,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create form response, making sure to use string formId for MongoDB
       const response = await storage.createFormResponse({
-        ...validatedData,
-        formId: formId // Use string ID for MongoDB
+        respondent: validatedData.respondent,
+        responses: validatedData.responses,
+        formId: formId,
+        email: validatedData.email || null
       });
       
       res.status(201).json({ success: true, responseId: response.id });
