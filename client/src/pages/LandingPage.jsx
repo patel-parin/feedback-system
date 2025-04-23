@@ -152,17 +152,17 @@ export default function LandingPage() {
           
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label htmlFor="username" className="block text-sm font-medium mb-1 text-gray-700">
-                Username
+              <label htmlFor="email" className="block text-sm font-medium mb-1 text-gray-700">
+                Email Address
               </label>
               <input
-                type="text"
-                id="username"
-                name="username"
-                value={formData.username}
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
                 onChange={handleChange}
                 className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
-                placeholder="Enter your username"
+                placeholder="Enter your email address"
                 required
               />
             </div>

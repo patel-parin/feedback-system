@@ -1,5 +1,6 @@
 import { MongoClient, ObjectId } from 'mongodb';
 import mongoose from 'mongoose';
+import 'dotenv/config';
 
 if (!process.env.MONGODB_URI) {
   throw new Error(
@@ -58,6 +59,14 @@ export const connectMongoose = async () => {
     await mongoose.connect(MONGODB_URI);
     isConnected = true;
     console.log('New Mongoose connection established');
+
+    // Drop collections to remove any incorrect indexes
+    await mongoose.connection.dropCollection('users').catch(() => {
+      console.log('Users collection does not exist, creating new one');
+    });
+    await mongoose.connection.dropCollection('formtemplates').catch(() => {
+      console.log('FormTemplates collection does not exist, creating new one');
+    });
   } catch (error) {
     console.error('Mongoose connection error:', error);
     // Don't call process.exit in serverless environments

@@ -47,7 +47,7 @@ async function initializeDatabase() {
   if (userCount === 0) {
     // Create admin user
     const adminUser = new User({
-      username: "admin",
+      email: "admin@example.com",
       password: "admin123",
       isAdmin: true
     });
