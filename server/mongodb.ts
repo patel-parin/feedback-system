@@ -8,28 +8,60 @@ if (!process.env.MONGODB_URI) {
 }
 
 const MONGODB_URI = process.env.MONGODB_URI as string;
+const options = {};
 
-// MongoDB connection
-export const client = new MongoClient(MONGODB_URI);
+// Global variable to store the connection for reuse between serverless function invocations
+let cachedClient: MongoClient | null = null;
+let cachedDb: any = null;
+let isConnected = false;
+
+// MongoDB connection with connection caching for serverless environments
+export const client = new MongoClient(MONGODB_URI, options);
 export const connectDB = async () => {
+  // If we have a cached connection, use it
+  if (cachedClient && cachedDb) {
+    return cachedDb;
+  }
+
   try {
-    await client.connect();
-    console.log('MongoDB connected successfully');
-    return client.db(); // Returns the database object
+    // If no cached connection, create a new one
+    if (!cachedClient) {
+      cachedClient = await MongoClient.connect(MONGODB_URI, options);
+      console.log('New MongoDB connection established');
+    } else {
+      console.log('Using cached MongoDB connection');
+    }
+
+    const db = cachedClient.db();
+    cachedDb = db;
+    return db;
   } catch (error) {
     console.error('MongoDB connection error:', error);
-    process.exit(1);
+    // Don't call process.exit in serverless environments
+    throw new Error('Failed to connect to MongoDB');
   }
 };
 
-// Mongoose connection for schema-based models
+// Mongoose connection with connection caching for serverless environments
 export const connectMongoose = async () => {
+  // If we're already connected, reuse the connection
+  if (mongoose.connection.readyState === 1 && isConnected) {
+    console.log('Using existing Mongoose connection');
+    return;
+  }
+
   try {
+    // Set mongoose options to work well in serverless environments
+    mongoose.set("strictQuery", false);
+    
+    // Connect to MongoDB
     await mongoose.connect(MONGODB_URI);
-    console.log('Mongoose connected successfully');
+    isConnected = true;
+    console.log('New Mongoose connection established');
   } catch (error) {
     console.error('Mongoose connection error:', error);
-    process.exit(1);
+    // Don't call process.exit in serverless environments
+    throw new Error('Failed to connect to MongoDB with Mongoose');
   }
 };
 

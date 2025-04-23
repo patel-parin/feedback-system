@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
@@ -16,6 +16,26 @@ import PublicForm from "./pages/PublicForm";
 import FormSubmissionSuccess from "./pages/FormSubmissionSuccess";
 
 function Router() {
+  // Get the current location to determine if we're on a public route
+  const [location] = (window as any).useLocation ? (window as any).useLocation() : ['/']; 
+  const isPublicRoute = location.startsWith('/public/') || location === '/forms/success';
+
+  // Public routes don't show the admin UI (header and sidebar)
+  if (isPublicRoute) {
+    return (
+      <div className="min-h-screen bg-neutral-light">
+        <main className="p-4 lg:p-6">
+          <Switch>
+            <Route path="/public/forms/:hash" component={PublicForm} />
+            <Route path="/forms/success" component={FormSubmissionSuccess} />
+            <Route component={NotFound} />
+          </Switch>
+        </main>
+      </div>
+    );
+  }
+
+  // Admin UI with header and sidebar
   return (
     <div className="flex flex-col h-screen">
       <AppHeader />
@@ -28,8 +48,6 @@ function Router() {
             <Route path="/forms/new" component={FormBuilder} />
             <Route path="/forms/:id/edit" component={FormBuilder} />
             <Route path="/forms/:id/responses" component={FormResponses} />
-            <Route path="/public/forms/:hash" component={PublicForm} />
-            <Route path="/forms/success" component={FormSubmissionSuccess} />
             <Route component={NotFound} />
           </Switch>
         </main>

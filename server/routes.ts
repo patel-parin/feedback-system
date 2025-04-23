@@ -19,6 +19,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     next();
   };
+  
+  // No auth needed middleware - just logs the access
+  const logPublicAccess = (req: Request, res: Response, next: Function) => {
+    console.log(`Public access to ${req.path}`);
+    next();
+  };
 
   // Auth routes
   app.post('/api/login', async (req, res) => {
@@ -129,7 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Public form access
-  app.get('/api/public/forms/:hash', async (req, res) => {
+  app.get('/api/public/forms/:hash', logPublicAccess, async (req, res) => {
     try {
       const hash = req.params.hash;
       const template = await storage.getFormTemplateByHash(hash);
@@ -151,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Submit form response
-  app.post('/api/public/forms/:id/submit', async (req, res) => {
+  app.post('/api/public/forms/:id/submit', logPublicAccess, async (req, res) => {
     try {
       const formId = req.params.id;
       const template = await storage.getFormTemplateById(formId);
