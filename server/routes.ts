@@ -27,6 +27,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // Auth routes
+  // User registration
+  app.post('/api/register', async (req, res) => {
+    try {
+      const { username, password, isAdmin } = req.body;
+      
+      // Validate required fields
+      if (!username || !password) {
+        return res.status(400).json({ message: 'Username and password are required' });
+      }
+      
+      // Check if username already exists
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(409).json({ message: 'Username already exists' });
+      }
+      
+      // Create new user
+      const newUser = await storage.createUser({
+        username,
+        password, // In a production app, this would be hashed
+        isAdmin: !!isAdmin
+      });
+      
+      // Return user data (excluding password)
+      res.status(201).json({
+        id: newUser.id,
+        username: newUser.username,
+        isAdmin: newUser.isAdmin
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
+      res.status(500).json({ message: 'Failed to create user account' });
+    }
+  });
+  
+  // User login
   app.post('/api/login', async (req, res) => {
     try {
       const { username, password } = loginSchema.parse(req.body);

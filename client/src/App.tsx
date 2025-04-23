@@ -9,6 +9,7 @@ import Sidebar from "./components/Sidebar";
 import NotFound from "@/pages/not-found";
 
 // Using dynamic imports for JSX files
+import LandingPage from "./pages/LandingPage";
 import FormDashboard from "./pages/FormDashboard";
 import FormBuilder from "./pages/FormBuilder";
 import FormResponses from "./pages/FormResponses";
@@ -19,6 +20,21 @@ function Router() {
   // Get the current location to determine if we're on a public route
   const [location] = useLocation();
   const isPublicRoute = location.startsWith('/public/') || location === '/forms/success';
+  const isLandingPage = location === '/' || location === '/login' || location === '/signup';
+
+  // Landing page (for authentication)
+  if (isLandingPage) {
+    return (
+      <div className="min-h-screen">
+        <Switch>
+          <Route path="/" component={LandingPage} />
+          <Route path="/login" component={LandingPage} />
+          <Route path="/signup" component={LandingPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </div>
+    );
+  }
 
   // Public routes don't show the admin UI (header and sidebar)
   if (isPublicRoute) {
@@ -43,7 +59,6 @@ function Router() {
         <Sidebar />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 bg-neutral-light">
           <Switch>
-            <Route path="/" component={FormDashboard} />
             <Route path="/dashboard" component={FormDashboard} />
             <Route path="/forms/new" component={FormBuilder} />
             <Route path="/forms/:id/edit" component={FormBuilder} />
