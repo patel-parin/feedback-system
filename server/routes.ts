@@ -59,8 +59,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const formData = createFormTemplateSchema.parse(req.body);
       const creatorId = String(req.query.userId || 'admin'); // Default to admin if not specified
       
+      // Ensure description has a value (MongoDB validation requires it)
+      const description = formData.description?.trim() 
+        ? formData.description 
+        : 'No description provided';
+      
       const newForm = await storage.createFormTemplate({
         ...formData,
+        description,
         createdBy: creatorId,
         active: true
       });
@@ -70,6 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: error.errors });
       }
+      console.error("Form creation error:", error);
       res.status(500).json({ message: 'Failed to create form template' });
     }
   });
