@@ -1,8 +1,9 @@
 import { 
   users, type User, type InsertUser,
-  feedback, type Feedback, type InsertFeedback,
-  categories, type Category, type InsertCategory
+  formTemplates, type FormTemplate, type InsertFormTemplate,
+  formResponses, type FormResponse, type InsertFormResponse
 } from "@shared/schema";
+import { randomBytes } from "crypto";
 
 export interface IStorage {
   // User methods
@@ -10,39 +11,41 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
-  // Feedback methods
-  getAllFeedback(): Promise<Feedback[]>;
-  getFeedbackById(id: number): Promise<Feedback | undefined>;
-  getFeedbackBySubmitter(submitter: string): Promise<Feedback[]>;
-  createFeedback(feedback: InsertFeedback): Promise<Feedback>;
-  updateFeedbackStatus(id: number, status: string): Promise<Feedback | undefined>;
-  updateFeedback(id: number, updates: Partial<InsertFeedback>): Promise<Feedback | undefined>;
-  deleteFeedback(id: number): Promise<boolean>;
+  // Form template methods
+  getAllFormTemplates(): Promise<FormTemplate[]>;
+  getFormTemplateById(id: number): Promise<FormTemplate | undefined>;
+  getFormTemplateByHash(accessHash: string): Promise<FormTemplate | undefined>;
+  getFormTemplatesByCreator(creatorId: number): Promise<FormTemplate[]>;
+  createFormTemplate(template: Omit<InsertFormTemplate, "accessHash">): Promise<FormTemplate>;
+  updateFormTemplate(id: number, updates: Partial<InsertFormTemplate>): Promise<FormTemplate | undefined>;
+  deleteFormTemplate(id: number): Promise<boolean>;
   
-  // Category methods
-  getAllCategories(): Promise<Category[]>;
-  getCategoryById(id: number): Promise<Category | undefined>;
-  createCategory(category: InsertCategory): Promise<Category>;
+  // Form response methods
+  getAllFormResponses(): Promise<FormResponse[]>;
+  getFormResponseById(id: number): Promise<FormResponse | undefined>;
+  getFormResponsesByForm(formId: number): Promise<FormResponse[]>;
+  createFormResponse(response: InsertFormResponse): Promise<FormResponse>;
+  deleteFormResponse(id: number): Promise<boolean>;
   
   // Statistics
-  getStats(): Promise<any>;
+  getFormStats(formId: number): Promise<any>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
-  private feedbackItems: Map<number, Feedback>;
-  private categoriesMap: Map<number, Category>;
+  private formTemplatesMap: Map<number, FormTemplate>;
+  private formResponsesMap: Map<number, FormResponse>;
   private userIdCounter: number;
-  private feedbackIdCounter: number;
-  private categoryIdCounter: number;
+  private formTemplateIdCounter: number;
+  private formResponseIdCounter: number;
 
   constructor() {
     this.users = new Map();
-    this.feedbackItems = new Map();
-    this.categoriesMap = new Map();
+    this.formTemplatesMap = new Map();
+    this.formResponsesMap = new Map();
     this.userIdCounter = 1;
-    this.feedbackIdCounter = 1;
-    this.categoryIdCounter = 1;
+    this.formTemplateIdCounter = 1;
+    this.formResponseIdCounter = 1;
     
     // Initialize with default admin user
     this.createUser({
@@ -51,43 +54,69 @@ export class MemStorage implements IStorage {
       isAdmin: true
     });
     
-    // Initialize with default categories
-    this.createCategory({ name: "Bug" });
-    this.createCategory({ name: "Feature" });
-    this.createCategory({ name: "UI/UX" });
-    this.createCategory({ name: "Performance" });
-    this.createCategory({ name: "Other" });
-    
-    // Add some sample feedback items
-    this.createFeedback({
-      title: "Login page freezes on Safari",
-      description: "When attempting to log in using Safari on macOS, the page freezes after clicking the login button. This does not happen on Chrome or Firefox.",
-      category: "Bug",
-      priority: "high",
-      status: "new",
-      submitterId: 1,
-      submitter: "admin"
+    // Create a sample form template
+    this.createFormTemplate({
+      title: "Customer Satisfaction Survey",
+      description: "Please help us improve our services by completing this short survey.",
+      createdBy: 1,
+      fields: [
+        {
+          id: "name",
+          label: "Your Name",
+          type: "text",
+          required: true,
+          placeholder: "Enter your full name"
+        },
+        {
+          id: "email",
+          label: "Email Address",
+          type: "email",
+          required: true,
+          placeholder: "your.email@example.com"
+        },
+        {
+          id: "satisfaction",
+          label: "How satisfied are you with our service?",
+          type: "radio",
+          required: true,
+          options: ["Very Satisfied", "Satisfied", "Neutral", "Dissatisfied", "Very Dissatisfied"]
+        },
+        {
+          id: "usage",
+          label: "How often do you use our product/service?",
+          type: "select",
+          required: true,
+          options: ["Daily", "Weekly", "Monthly", "Rarely", "First time"]
+        },
+        {
+          id: "feedback",
+          label: "Any additional feedback or suggestions?",
+          type: "textarea",
+          required: false,
+          placeholder: "Share your thoughts with us..."
+        }
+      ],
+      active: true
     });
     
-    this.createFeedback({
-      title: "Add dark mode to the application",
-      description: "Would be great to have a dark mode option for better usability at night and to reduce eye strain.",
-      category: "Feature",
-      priority: "medium",
-      status: "in-progress",
-      submitterId: 1,
-      submitter: "admin"
+    // Add a sample response to the form
+    this.createFormResponse({
+      formId: 1,
+      respondent: "John Doe",
+      email: "john.doe@example.com",
+      responses: {
+        name: "John Doe",
+        email: "john.doe@example.com",
+        satisfaction: "Satisfied",
+        usage: "Weekly",
+        feedback: "Your customer service team is excellent!"
+      }
     });
-    
-    this.createFeedback({
-      title: "Improve loading time of product page",
-      description: "The product page takes too long to load, especially on mobile devices. Please optimize the images and reduce JavaScript execution time.",
-      category: "Performance",
-      priority: "low",
-      status: "resolved",
-      submitterId: 1,
-      submitter: "admin"
-    });
+  }
+
+  // Helper to generate a unique hash for form access
+  private generateAccessHash(): string {
+    return randomBytes(16).toString('hex');
   }
 
   // User methods
@@ -103,112 +132,185 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userIdCounter++;
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      ...insertUser, 
+      id,
+      isAdmin: insertUser.isAdmin ?? false
+    };
     this.users.set(id, user);
     return user;
   }
   
-  // Feedback methods
-  async getAllFeedback(): Promise<Feedback[]> {
-    return Array.from(this.feedbackItems.values());
+  // Form template methods
+  async getAllFormTemplates(): Promise<FormTemplate[]> {
+    return Array.from(this.formTemplatesMap.values());
   }
   
-  async getFeedbackById(id: number): Promise<Feedback | undefined> {
-    return this.feedbackItems.get(id);
+  async getFormTemplateById(id: number): Promise<FormTemplate | undefined> {
+    return this.formTemplatesMap.get(id);
   }
   
-  async getFeedbackBySubmitter(submitter: string): Promise<Feedback[]> {
-    return Array.from(this.feedbackItems.values()).filter(
-      (feedback) => feedback.submitter === submitter
+  async getFormTemplateByHash(accessHash: string): Promise<FormTemplate | undefined> {
+    return Array.from(this.formTemplatesMap.values()).find(
+      (template) => template.accessHash === accessHash
     );
   }
   
-  async createFeedback(insertFeedback: InsertFeedback): Promise<Feedback> {
-    const id = this.feedbackIdCounter++;
+  async getFormTemplatesByCreator(creatorId: number): Promise<FormTemplate[]> {
+    return Array.from(this.formTemplatesMap.values()).filter(
+      (template) => template.createdBy === creatorId
+    );
+  }
+  
+  async createFormTemplate(templateData: Omit<InsertFormTemplate, "accessHash">): Promise<FormTemplate> {
+    const id = this.formTemplateIdCounter++;
+    const accessHash = this.generateAccessHash();
     const createdAt = new Date();
-    const feedback: Feedback = { 
-      ...insertFeedback, 
+    
+    const template: FormTemplate = {
+      ...templateData, 
       id,
-      createdAt
-    };
-    this.feedbackItems.set(id, feedback);
-    return feedback;
-  }
-  
-  async updateFeedbackStatus(id: number, status: string): Promise<Feedback | undefined> {
-    const feedback = this.feedbackItems.get(id);
-    if (!feedback) return undefined;
-    
-    const updatedFeedback = { ...feedback, status };
-    this.feedbackItems.set(id, updatedFeedback);
-    return updatedFeedback;
-  }
-  
-  async updateFeedback(id: number, updates: Partial<InsertFeedback>): Promise<Feedback | undefined> {
-    const feedback = this.feedbackItems.get(id);
-    if (!feedback) return undefined;
-    
-    const updatedFeedback = { ...feedback, ...updates };
-    this.feedbackItems.set(id, updatedFeedback);
-    return updatedFeedback;
-  }
-  
-  async deleteFeedback(id: number): Promise<boolean> {
-    return this.feedbackItems.delete(id);
-  }
-  
-  // Category methods
-  async getAllCategories(): Promise<Category[]> {
-    return Array.from(this.categoriesMap.values());
-  }
-  
-  async getCategoryById(id: number): Promise<Category | undefined> {
-    return this.categoriesMap.get(id);
-  }
-  
-  async createCategory(insertCategory: InsertCategory): Promise<Category> {
-    const id = this.categoryIdCounter++;
-    const category: Category = { ...insertCategory, id };
-    this.categoriesMap.set(id, category);
-    return category;
-  }
-  
-  async getStats(): Promise<any> {
-    const feedbackItems = Array.from(this.feedbackItems.values());
-    
-    // Count by status
-    const statusCounts = {
-      new: feedbackItems.filter(fb => fb.status === 'new').length,
-      inProgress: feedbackItems.filter(fb => fb.status === 'in-progress').length,
-      resolved: feedbackItems.filter(fb => fb.status === 'resolved').length
+      accessHash,
+      createdAt,
+      createdBy: templateData.createdBy ?? null,
+      active: templateData.active ?? true
     };
     
-    // Count by priority
-    const priorityCounts = {
-      high: feedbackItems.filter(fb => fb.priority === 'high').length,
-      medium: feedbackItems.filter(fb => fb.priority === 'medium').length,
-      low: feedbackItems.filter(fb => fb.priority === 'low').length
+    this.formTemplatesMap.set(id, template);
+    return template;
+  }
+  
+  async updateFormTemplate(id: number, updates: Partial<InsertFormTemplate>): Promise<FormTemplate | undefined> {
+    const template = this.formTemplatesMap.get(id);
+    if (!template) return undefined;
+    
+    const updatedTemplate = { ...template, ...updates };
+    this.formTemplatesMap.set(id, updatedTemplate);
+    return updatedTemplate;
+  }
+  
+  async deleteFormTemplate(id: number): Promise<boolean> {
+    return this.formTemplatesMap.delete(id);
+  }
+  
+  // Form response methods
+  async getAllFormResponses(): Promise<FormResponse[]> {
+    return Array.from(this.formResponsesMap.values());
+  }
+  
+  async getFormResponseById(id: number): Promise<FormResponse | undefined> {
+    return this.formResponsesMap.get(id);
+  }
+  
+  async getFormResponsesByForm(formId: number): Promise<FormResponse[]> {
+    return Array.from(this.formResponsesMap.values()).filter(
+      (response) => response.formId === formId
+    );
+  }
+  
+  async createFormResponse(responseData: InsertFormResponse): Promise<FormResponse> {
+    const id = this.formResponseIdCounter++;
+    const submittedAt = new Date();
+    
+    const response: FormResponse = {
+      ...responseData,
+      id,
+      submittedAt,
+      formId: responseData.formId ?? null,
+      email: responseData.email ?? null
     };
     
-    // Count by category
-    const categoryCounts = {};
-    feedbackItems.forEach(fb => {
-      if (!categoryCounts[fb.category]) {
-        categoryCounts[fb.category] = 0;
+    this.formResponsesMap.set(id, response);
+    return response;
+  }
+  
+  async deleteFormResponse(id: number): Promise<boolean> {
+    return this.formResponsesMap.delete(id);
+  }
+  
+  // Statistics
+  async getFormStats(formId: number): Promise<any> {
+    const responses = await this.getFormResponsesByForm(formId);
+    const template = await this.getFormTemplateById(formId);
+    
+    if (!template) {
+      return { error: "Form template not found" };
+    }
+    
+    // Basic stats
+    const stats: {
+      totalResponses: number;
+      fields: Record<string, any>;
+    } = {
+      totalResponses: responses.length,
+      fields: {}
+    };
+    
+    // If there are no responses, return basic stats
+    if (responses.length === 0) {
+      return stats;
+    }
+    
+    // Cast fields to the correct type
+    const fields = template.fields as Array<{
+      id: string;
+      label: string;
+      type: string;
+      required: boolean;
+      options?: string[];
+    }>;
+    
+    // For each field in the template, calculate relevant statistics
+    fields.forEach(field => {
+      // Skip if not a radio, select, or checkbox field
+      if (!['radio', 'select', 'checkbox'].includes(field.type)) {
+        return;
       }
-      categoryCounts[fb.category]++;
+      
+      const fieldStats: {
+        options: Record<string, number>;
+        totalAnswers: number;
+      } = {
+        options: {},
+        totalAnswers: 0
+      };
+      
+      // Count responses for each option
+      if (field.options) {
+        field.options.forEach((option: string) => {
+          fieldStats.options[option] = 0;
+        });
+      }
+      
+      // Populate counts
+      responses.forEach(response => {
+        const responseData = response.responses as Record<string, any>;
+        const answer = responseData[field.id];
+        
+        if (answer) {
+          if (Array.isArray(answer)) {
+            // Handle checkbox responses (multiple selections)
+            answer.forEach((selectedOption: string) => {
+              if (fieldStats.options[selectedOption] !== undefined) {
+                fieldStats.options[selectedOption]++;
+                fieldStats.totalAnswers++;
+              }
+            });
+          } else {
+            // Handle radio/select responses
+            if (fieldStats.options[answer] !== undefined) {
+              fieldStats.options[answer]++;
+              fieldStats.totalAnswers++;
+            }
+          }
+        }
+      });
+      
+      // Add to overall stats
+      stats.fields[field.id] = fieldStats;
     });
     
-    return {
-      total: feedbackItems.length,
-      statusDistribution: {
-        new: statusCounts.new,
-        inProgress: statusCounts.inProgress,
-        resolved: statusCounts.resolved
-      },
-      priorityDistribution: priorityCounts,
-      categoryDistribution: categoryCounts
-    };
+    return stats;
   }
 }
 

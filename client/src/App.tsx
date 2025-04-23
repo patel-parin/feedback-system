@@ -6,11 +6,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "./context/AuthContext";
 import AppHeader from "./components/AppHeader";
 import Sidebar from "./components/Sidebar";
-import Dashboard from "./pages/Dashboard";
-import AllFeedback from "./pages/AllFeedback";
-import SubmitFeedback from "./pages/SubmitFeedback";
-import MyFeedback from "./pages/MyFeedback";
 import NotFound from "@/pages/not-found";
+
+// Using dynamic imports for JSX files
+import FormDashboard from "./pages/FormDashboard";
+import FormBuilder from "./pages/FormBuilder";
+import FormResponses from "./pages/FormResponses";
+import PublicForm from "./pages/PublicForm";
+import FormSubmissionSuccess from "./pages/FormSubmissionSuccess";
 
 function Router() {
   return (
@@ -20,11 +23,13 @@ function Router() {
         <Sidebar />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 bg-neutral-light">
           <Switch>
-            <Route path="/" component={Dashboard} />
-            <Route path="/dashboard" component={Dashboard} />
-            <Route path="/all-feedback" component={AllFeedback} />
-            <Route path="/submit-feedback" component={SubmitFeedback} />
-            <Route path="/my-feedback" component={MyFeedback} />
+            <Route path="/" component={FormDashboard} />
+            <Route path="/dashboard" component={FormDashboard} />
+            <Route path="/forms/new" component={FormBuilder} />
+            <Route path="/forms/:id/edit" component={FormBuilder} />
+            <Route path="/forms/:id/responses" component={FormResponses} />
+            <Route path="/public/forms/:hash" component={PublicForm} />
+            <Route path="/forms/success" component={FormSubmissionSuccess} />
             <Route component={NotFound} />
           </Switch>
         </main>

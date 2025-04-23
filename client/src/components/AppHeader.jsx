@@ -1,5 +1,6 @@
 import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
+import { Link } from "wouter";
 
 export default function AppHeader() {
   const { user, logout } = useContext(AuthContext);
@@ -19,7 +20,12 @@ export default function AppHeader() {
           <button onClick={toggleSidebar} className="mr-4 lg:hidden">
             <span className="material-icons">menu</span>
           </button>
-          <h1 className="text-xl font-medium">Feedback Management System</h1>
+          <Link href="/">
+            <div className="flex items-center cursor-pointer">
+              <span className="material-icons mr-2">dynamic_form</span>
+              <h1 className="text-xl font-medium">Form Builder</h1>
+            </div>
+          </Link>
         </div>
         <div className="flex items-center">
           <span className="material-icons mr-2">account_circle</span>
