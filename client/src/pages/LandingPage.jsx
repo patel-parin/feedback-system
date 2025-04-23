@@ -11,7 +11,7 @@ export default function LandingPage() {
   
   // Form state
   const [formData, setFormData] = useState({
-    username: "",
+    email: "",
     password: "",
     confirmPassword: "",
     isAdmin: false,
@@ -32,7 +32,7 @@ export default function LandingPage() {
     onSuccess: (data) => {
       toast({
         title: "Login successful!",
-        description: `Welcome back, ${data.username}!`,
+        description: `Welcome back!`,
       });
       
       // Redirect to dashboard
@@ -41,7 +41,7 @@ export default function LandingPage() {
     onError: (error) => {
       toast({
         title: "Login failed",
-        description: "Invalid username or password",
+        description: "Invalid email or password",
         variant: "destructive",
       });
     }
@@ -75,7 +75,7 @@ export default function LandingPage() {
     if (isLoginMode) {
       // Login
       loginMutation.mutate({
-        username: formData.username,
+        email: formData.email,
         password: formData.password,
       });
     } else {
@@ -89,8 +89,19 @@ export default function LandingPage() {
         return;
       }
       
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        toast({
+          title: "Invalid email",
+          description: "Please enter a valid email address",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       registerMutation.mutate({
-        username: formData.username,
+        email: formData.email,
         password: formData.password,
         isAdmin: formData.isAdmin,
       });

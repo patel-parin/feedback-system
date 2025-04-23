@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto';
 
 // User schema
 const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   isAdmin: { type: Boolean, default: false }
 });
@@ -44,7 +44,7 @@ export const FormResponse = mongoose.model('FormResponse', formResponseSchema);
 // Type definitions to match our previous PostgreSQL types
 export type UserDocument = mongoose.Document & {
   id: string;
-  username: string;
+  email: string;
   password: string;
   isAdmin: boolean;
 };

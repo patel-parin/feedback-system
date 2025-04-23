@@ -6,7 +6,7 @@ import mongoose from "mongoose";
 // Define types that match our previous schema for compatibility
 export type UserType = {
   id: string;
-  username: string;
+  email: string;
   password: string;
   isAdmin: boolean;
 };
@@ -39,7 +39,7 @@ export type InsertFormResponseType = Omit<FormResponseType, "id" | "submittedAt"
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<UserType | undefined>;
-  getUserByUsername(username: string): Promise<UserType | undefined>;
+  getUserByEmail(email: string): Promise<UserType | undefined>;
   createUser(user: InsertUserType): Promise<UserType>;
   
   // Form template methods
@@ -95,12 +95,12 @@ export class MongoDBStorage implements IStorage {
     }
   }
 
-  async getUserByUsername(username: string): Promise<UserType | undefined> {
+  async getUserByEmail(email: string): Promise<UserType | undefined> {
     try {
-      const user = await User.findOne({ username });
+      const user = await User.findOne({ email });
       return documentToPlain<UserType>(user);
     } catch (error) {
-      console.error("Error fetching user by username:", error);
+      console.error("Error fetching user by email:", error);
       return undefined;
     }
   }

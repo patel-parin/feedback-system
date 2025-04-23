@@ -30,22 +30,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User registration
   app.post('/api/register', async (req, res) => {
     try {
-      const { username, password, isAdmin } = req.body;
+      const { email, password, isAdmin } = req.body;
       
       // Validate required fields
-      if (!username || !password) {
-        return res.status(400).json({ message: 'Username and password are required' });
+      if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
       }
       
-      // Check if username already exists
-      const existingUser = await storage.getUserByUsername(username);
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ message: 'Invalid email format' });
+      }
+      
+      // Check if email already exists
+      const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
-        return res.status(409).json({ message: 'Username already exists' });
+        return res.status(409).json({ message: 'Email already exists' });
       }
       
       // Create new user
       const newUser = await storage.createUser({
-        username,
+        email,
         password, // In a production app, this would be hashed
         isAdmin: !!isAdmin
       });
@@ -53,7 +59,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Return user data (excluding password)
       res.status(201).json({
         id: newUser.id,
-        username: newUser.username,
+        email: newUser.email,
         isAdmin: newUser.isAdmin
       });
     } catch (error) {
@@ -65,23 +71,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User login
   app.post('/api/login', async (req, res) => {
     try {
-      const { username, password } = loginSchema.parse(req.body);
-      const user = await storage.getUserByUsername(username);
+      const { email, password } = req.body;
+      
+      // Validate required fields
+      if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
+      }
+      
+      const user = await storage.getUserByEmail(email);
       
       if (!user || user.password !== password) {
-        return res.status(401).json({ message: 'Invalid username or password' });
+        return res.status(401).json({ message: 'Invalid email or password' });
       }
       
       // In a real app, you would set up a session here
       res.status(200).json({ 
         id: user.id, 
-        username: user.username, 
+        email: user.email, 
         isAdmin: user.isAdmin 
       });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors });
-      }
+      console.error('Login error:', error);
       res.status(500).json({ message: 'Internal server error' });
     }
   });
