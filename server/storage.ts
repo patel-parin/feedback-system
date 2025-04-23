@@ -1,36 +1,65 @@
-import { 
-  users, type User, type InsertUser,
-  formTemplates, type FormTemplate, type InsertFormTemplate,
-  formResponses, type FormResponse, type InsertFormResponse
-} from "@shared/schema";
 import { randomBytes } from "crypto";
-import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { User, FormTemplate, FormResponse } from "./models";
+import { connectMongoose } from "./mongodb";
+import mongoose from "mongoose";
+
+// Define types that match our previous schema for compatibility
+export type UserType = {
+  id: string;
+  username: string;
+  password: string;
+  isAdmin: boolean;
+};
+
+export type FormTemplateType = {
+  id: string;
+  title: string;
+  description: string;
+  createdBy: string | null;
+  fields: any[];
+  accessHash: string;
+  createdAt: Date;
+  active: boolean;
+};
+
+export type FormResponseType = {
+  id: string;
+  formId: string;
+  responses: Record<string, any>;
+  respondent: string;
+  email: string | null;
+  submittedAt: Date;
+};
+
+// Define insert types for compatibility with our APIs
+export type InsertUserType = Omit<UserType, "id">;
+export type InsertFormTemplateType = Omit<FormTemplateType, "id" | "createdAt" | "accessHash"> & { accessHash?: string };
+export type InsertFormResponseType = Omit<FormResponseType, "id" | "submittedAt">;
 
 export interface IStorage {
   // User methods
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getUser(id: string): Promise<UserType | undefined>;
+  getUserByUsername(username: string): Promise<UserType | undefined>;
+  createUser(user: InsertUserType): Promise<UserType>;
   
   // Form template methods
-  getAllFormTemplates(): Promise<FormTemplate[]>;
-  getFormTemplateById(id: number): Promise<FormTemplate | undefined>;
-  getFormTemplateByHash(accessHash: string): Promise<FormTemplate | undefined>;
-  getFormTemplatesByCreator(creatorId: number): Promise<FormTemplate[]>;
-  createFormTemplate(template: Omit<InsertFormTemplate, "accessHash">): Promise<FormTemplate>;
-  updateFormTemplate(id: number, updates: Partial<InsertFormTemplate>): Promise<FormTemplate | undefined>;
-  deleteFormTemplate(id: number): Promise<boolean>;
+  getAllFormTemplates(): Promise<FormTemplateType[]>;
+  getFormTemplateById(id: string): Promise<FormTemplateType | undefined>;
+  getFormTemplateByHash(accessHash: string): Promise<FormTemplateType | undefined>;
+  getFormTemplatesByCreator(creatorId: string): Promise<FormTemplateType[]>;
+  createFormTemplate(template: Omit<InsertFormTemplateType, "accessHash">): Promise<FormTemplateType>;
+  updateFormTemplate(id: string, updates: Partial<InsertFormTemplateType>): Promise<FormTemplateType | undefined>;
+  deleteFormTemplate(id: string): Promise<boolean>;
   
   // Form response methods
-  getAllFormResponses(): Promise<FormResponse[]>;
-  getFormResponseById(id: number): Promise<FormResponse | undefined>;
-  getFormResponsesByForm(formId: number): Promise<FormResponse[]>;
-  createFormResponse(response: InsertFormResponse): Promise<FormResponse>;
-  deleteFormResponse(id: number): Promise<boolean>;
+  getAllFormResponses(): Promise<FormResponseType[]>;
+  getFormResponseById(id: string): Promise<FormResponseType | undefined>;
+  getFormResponsesByForm(formId: string): Promise<FormResponseType[]>;
+  createFormResponse(response: InsertFormResponseType): Promise<FormResponseType>;
+  deleteFormResponse(id: string): Promise<boolean>;
   
   // Statistics
-  getFormStats(formId: number): Promise<any>;
+  getFormStats(formId: string): Promise<any>;
 }
 
 // Helper to generate a unique hash for form access
@@ -38,201 +67,275 @@ function generateAccessHash(): string {
   return randomBytes(16).toString('hex');
 }
 
-export class DatabaseStorage implements IStorage {
-  async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+// Helper to convert MongoDB document to plain object with id field
+function documentToPlain<T>(doc: mongoose.Document | null): T | undefined {
+  if (!doc) return undefined;
+  
+  const obj = doc.toObject();
+  obj.id = obj._id.toString();
+  delete obj._id;
+  delete obj.__v;
+  
+  return obj as T;
+}
+
+export class MongoDBStorage implements IStorage {
+  constructor() {
+    // Ensure the MongoDB connection is established
+    connectMongoose();
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(insertUser)
-      .returning();
-    return user;
-  }
-  
-  async getAllFormTemplates(): Promise<FormTemplate[]> {
-    return await db.select().from(formTemplates);
-  }
-  
-  async getFormTemplateById(id: number): Promise<FormTemplate | undefined> {
-    const [template] = await db.select().from(formTemplates).where(eq(formTemplates.id, id));
-    return template;
-  }
-  
-  async getFormTemplateByHash(accessHash: string): Promise<FormTemplate | undefined> {
-    const [template] = await db.select().from(formTemplates).where(eq(formTemplates.accessHash, accessHash));
-    return template;
-  }
-  
-  async getFormTemplatesByCreator(creatorId: number): Promise<FormTemplate[]> {
-    return await db.select().from(formTemplates).where(eq(formTemplates.createdBy, creatorId));
-  }
-  
-  async createFormTemplate(templateData: Omit<InsertFormTemplate, "accessHash">): Promise<FormTemplate> {
-    const accessHash = generateAccessHash();
-    
-    const [template] = await db
-      .insert(formTemplates)
-      .values({
-        ...templateData,
-        accessHash
-      })
-      .returning();
-      
-    return template;
-  }
-  
-  async updateFormTemplate(id: number, updates: Partial<InsertFormTemplate>): Promise<FormTemplate | undefined> {
-    const [updatedTemplate] = await db
-      .update(formTemplates)
-      .set(updates)
-      .where(eq(formTemplates.id, id))
-      .returning();
-      
-    return updatedTemplate;
-  }
-  
-  async deleteFormTemplate(id: number): Promise<boolean> {
+  async getUser(id: string): Promise<UserType | undefined> {
     try {
-      const [deletedTemplate] = await db
-        .delete(formTemplates)
-        .where(eq(formTemplates.id, id))
-        .returning({ id: formTemplates.id });
-        
-      return !!deletedTemplate;
+      const user = await User.findById(id);
+      return documentToPlain<UserType>(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      return undefined;
+    }
+  }
+
+  async getUserByUsername(username: string): Promise<UserType | undefined> {
+    try {
+      const user = await User.findOne({ username });
+      return documentToPlain<UserType>(user);
+    } catch (error) {
+      console.error("Error fetching user by username:", error);
+      return undefined;
+    }
+  }
+
+  async createUser(insertUser: InsertUserType): Promise<UserType> {
+    try {
+      const user = new User(insertUser);
+      await user.save();
+      return documentToPlain<UserType>(user)!;
+    } catch (error) {
+      console.error("Error creating user:", error);
+      throw error;
+    }
+  }
+  
+  async getAllFormTemplates(): Promise<FormTemplateType[]> {
+    try {
+      const templates = await FormTemplate.find();
+      return templates.map(template => documentToPlain<FormTemplateType>(template)!);
+    } catch (error) {
+      console.error("Error fetching form templates:", error);
+      return [];
+    }
+  }
+  
+  async getFormTemplateById(id: string): Promise<FormTemplateType | undefined> {
+    try {
+      const template = await FormTemplate.findById(id);
+      return documentToPlain<FormTemplateType>(template);
+    } catch (error) {
+      console.error("Error fetching form template:", error);
+      return undefined;
+    }
+  }
+  
+  async getFormTemplateByHash(accessHash: string): Promise<FormTemplateType | undefined> {
+    try {
+      const template = await FormTemplate.findOne({ accessHash });
+      return documentToPlain<FormTemplateType>(template);
+    } catch (error) {
+      console.error("Error fetching form template by hash:", error);
+      return undefined;
+    }
+  }
+  
+  async getFormTemplatesByCreator(creatorId: string): Promise<FormTemplateType[]> {
+    try {
+      const templates = await FormTemplate.find({ createdBy: creatorId });
+      return templates.map(template => documentToPlain<FormTemplateType>(template)!);
+    } catch (error) {
+      console.error("Error fetching form templates by creator:", error);
+      return [];
+    }
+  }
+  
+  async createFormTemplate(templateData: Omit<InsertFormTemplateType, "accessHash">): Promise<FormTemplateType> {
+    try {
+      const template = new FormTemplate({
+        ...templateData,
+        accessHash: generateAccessHash()
+      });
+      
+      await template.save();
+      return documentToPlain<FormTemplateType>(template)!;
+    } catch (error) {
+      console.error("Error creating form template:", error);
+      throw error;
+    }
+  }
+  
+  async updateFormTemplate(id: string, updates: Partial<InsertFormTemplateType>): Promise<FormTemplateType | undefined> {
+    try {
+      const template = await FormTemplate.findByIdAndUpdate(
+        id,
+        { $set: updates },
+        { new: true } // Return the updated document
+      );
+      
+      return documentToPlain<FormTemplateType>(template);
+    } catch (error) {
+      console.error("Error updating form template:", error);
+      return undefined;
+    }
+  }
+  
+  async deleteFormTemplate(id: string): Promise<boolean> {
+    try {
+      const result = await FormTemplate.findByIdAndDelete(id);
+      return !!result;
     } catch (error) {
       console.error("Error deleting form template:", error);
       return false;
     }
   }
   
-  async getAllFormResponses(): Promise<FormResponse[]> {
-    return await db.select().from(formResponses);
-  }
-  
-  async getFormResponseById(id: number): Promise<FormResponse | undefined> {
-    const [response] = await db.select().from(formResponses).where(eq(formResponses.id, id));
-    return response;
-  }
-  
-  async getFormResponsesByForm(formId: number): Promise<FormResponse[]> {
-    return await db.select().from(formResponses).where(eq(formResponses.formId, formId));
-  }
-  
-  async createFormResponse(responseData: InsertFormResponse): Promise<FormResponse> {
-    const [response] = await db
-      .insert(formResponses)
-      .values(responseData)
-      .returning();
-      
-    return response;
-  }
-  
-  async deleteFormResponse(id: number): Promise<boolean> {
+  async getAllFormResponses(): Promise<FormResponseType[]> {
     try {
-      const [deletedResponse] = await db
-        .delete(formResponses)
-        .where(eq(formResponses.id, id))
-        .returning({ id: formResponses.id });
-        
-      return !!deletedResponse;
+      const responses = await FormResponse.find();
+      return responses.map(response => documentToPlain<FormResponseType>(response)!);
+    } catch (error) {
+      console.error("Error fetching form responses:", error);
+      return [];
+    }
+  }
+  
+  async getFormResponseById(id: string): Promise<FormResponseType | undefined> {
+    try {
+      const response = await FormResponse.findById(id);
+      return documentToPlain<FormResponseType>(response);
+    } catch (error) {
+      console.error("Error fetching form response:", error);
+      return undefined;
+    }
+  }
+  
+  async getFormResponsesByForm(formId: string): Promise<FormResponseType[]> {
+    try {
+      const responses = await FormResponse.find({ formId });
+      return responses.map(response => documentToPlain<FormResponseType>(response)!);
+    } catch (error) {
+      console.error("Error fetching form responses by form:", error);
+      return [];
+    }
+  }
+  
+  async createFormResponse(responseData: InsertFormResponseType): Promise<FormResponseType> {
+    try {
+      const response = new FormResponse(responseData);
+      await response.save();
+      return documentToPlain<FormResponseType>(response)!;
+    } catch (error) {
+      console.error("Error creating form response:", error);
+      throw error;
+    }
+  }
+  
+  async deleteFormResponse(id: string): Promise<boolean> {
+    try {
+      const result = await FormResponse.findByIdAndDelete(id);
+      return !!result;
     } catch (error) {
       console.error("Error deleting form response:", error);
       return false;
     }
   }
   
-  async getFormStats(formId: number): Promise<any> {
-    const responses = await this.getFormResponsesByForm(formId);
-    const template = await this.getFormTemplateById(formId);
-    
-    if (!template) {
-      return { error: "Form template not found" };
-    }
-    
-    // Basic stats
-    const stats: {
-      totalResponses: number;
-      fields: Record<string, any>;
-    } = {
-      totalResponses: responses.length,
-      fields: {}
-    };
-    
-    // If there are no responses, return basic stats
-    if (responses.length === 0) {
-      return stats;
-    }
-    
-    // Cast fields to the correct type
-    const fields = template.fields as Array<{
-      id: string;
-      label: string;
-      type: string;
-      required: boolean;
-      options?: string[];
-    }>;
-    
-    // For each field in the template, calculate relevant statistics
-    fields.forEach(field => {
-      // Skip if not a radio, select, or checkbox field
-      if (!['radio', 'select', 'checkbox'].includes(field.type)) {
-        return;
+  async getFormStats(formId: string): Promise<any> {
+    try {
+      const responses = await this.getFormResponsesByForm(formId);
+      const template = await this.getFormTemplateById(formId);
+      
+      if (!template) {
+        return { error: "Form template not found" };
       }
       
-      const fieldStats: {
-        options: Record<string, number>;
-        totalAnswers: number;
+      // Basic stats
+      const stats: {
+        totalResponses: number;
+        fields: Record<string, any>;
       } = {
-        options: {},
-        totalAnswers: 0
+        totalResponses: responses.length,
+        fields: {}
       };
       
-      // Count responses for each option
-      if (field.options) {
-        field.options.forEach((option: string) => {
-          fieldStats.options[option] = 0;
-        });
+      // If there are no responses, return basic stats
+      if (responses.length === 0) {
+        return stats;
       }
       
-      // Populate counts
-      responses.forEach(response => {
-        const responseData = response.responses as Record<string, any>;
-        const answer = responseData[field.id];
+      // Cast fields to the correct type
+      const fields = template.fields as Array<{
+        id: string;
+        label: string;
+        type: string;
+        required: boolean;
+        options?: string[];
+      }>;
+      
+      // For each field in the template, calculate relevant statistics
+      fields.forEach(field => {
+        // Skip if not a radio, select, or checkbox field
+        if (!['radio', 'select', 'checkbox'].includes(field.type)) {
+          return;
+        }
         
-        if (answer) {
-          if (Array.isArray(answer)) {
-            // Handle checkbox responses (multiple selections)
-            answer.forEach((selectedOption: string) => {
-              if (fieldStats.options[selectedOption] !== undefined) {
-                fieldStats.options[selectedOption]++;
+        const fieldStats: {
+          options: Record<string, number>;
+          totalAnswers: number;
+        } = {
+          options: {},
+          totalAnswers: 0
+        };
+        
+        // Count responses for each option
+        if (field.options) {
+          field.options.forEach((option: string) => {
+            fieldStats.options[option] = 0;
+          });
+        }
+        
+        // Populate counts
+        responses.forEach(response => {
+          const responseData = response.responses as Record<string, any>;
+          const answer = responseData[field.id];
+          
+          if (answer) {
+            if (Array.isArray(answer)) {
+              // Handle checkbox responses (multiple selections)
+              answer.forEach((selectedOption: string) => {
+                if (fieldStats.options[selectedOption] !== undefined) {
+                  fieldStats.options[selectedOption]++;
+                  fieldStats.totalAnswers++;
+                }
+              });
+            } else {
+              // Handle radio/select responses
+              if (fieldStats.options[answer] !== undefined) {
+                fieldStats.options[answer]++;
                 fieldStats.totalAnswers++;
               }
-            });
-          } else {
-            // Handle radio/select responses
-            if (fieldStats.options[answer] !== undefined) {
-              fieldStats.options[answer]++;
-              fieldStats.totalAnswers++;
             }
           }
-        }
+        });
+        
+        // Add to overall stats
+        stats.fields[field.id] = fieldStats;
       });
       
-      // Add to overall stats
-      stats.fields[field.id] = fieldStats;
-    });
-    
-    return stats;
+      return stats;
+    } catch (error) {
+      console.error("Error calculating form stats:", error);
+      return { error: "Failed to calculate statistics" };
+    }
   }
 }
 
-// Initialize database storage
-export const storage = new DatabaseStorage();
+// Initialize MongoDB storage
+export const storage = new MongoDBStorage();

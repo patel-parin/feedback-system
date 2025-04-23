@@ -57,7 +57,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/forms', authenticateUser, async (req, res) => {
     try {
       const formData = createFormTemplateSchema.parse(req.body);
-      const creatorId = Number(req.query.userId) || 1; // Default to admin if not specified
+      const creatorId = String(req.query.userId || 'admin'); // Default to admin if not specified
       
       const newForm = await storage.createFormTemplate({
         ...formData,
@@ -76,7 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get('/api/forms/:id', authenticateUser, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id;
       const template = await storage.getFormTemplateById(id);
       
       if (!template) {
@@ -91,7 +91,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.put('/api/forms/:id', authenticateUser, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id;
       const updates = req.body;
       
       const updatedTemplate = await storage.updateFormTemplate(id, updates);
@@ -108,7 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.delete('/api/forms/:id', authenticateUser, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id;
       const success = await storage.deleteFormTemplate(id);
       
       if (!success) {
@@ -146,21 +146,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Submit form response
   app.post('/api/public/forms/:id/submit', async (req, res) => {
     try {
-      const formId = parseInt(req.params.id);
+      const formId = req.params.id;
       const template = await storage.getFormTemplateById(formId);
       
       if (!template || !template.active) {
         return res.status(404).json({ message: 'Form not found or inactive' });
       }
       
-      // Validate form data
-      const responseData = submitFormResponseSchema.parse({
+      // Validate form data and convert to match MongoDB type expectations
+      const validatedData = submitFormResponseSchema.parse({
         ...req.body,
-        formId
+        formId: parseInt(formId) // Keep as number for validation
       });
       
-      // Create form response
-      const response = await storage.createFormResponse(responseData);
+      // Create form response, making sure to use string formId for MongoDB
+      const response = await storage.createFormResponse({
+        ...validatedData,
+        formId: formId // Use string ID for MongoDB
+      });
       
       res.status(201).json({ success: true, responseId: response.id });
     } catch (error) {
@@ -174,7 +177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get responses for a form (Admin only)
   app.get('/api/forms/:id/responses', authenticateUser, async (req, res) => {
     try {
-      const formId = parseInt(req.params.id);
+      const formId = req.params.id;
       const responses = await storage.getFormResponsesByForm(formId);
       res.status(200).json(responses);
     } catch (error) {
@@ -185,7 +188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get statistics for a form (Admin only)
   app.get('/api/forms/:id/stats', authenticateUser, async (req, res) => {
     try {
-      const formId = parseInt(req.params.id);
+      const formId = req.params.id;
       const stats = await storage.getFormStats(formId);
       res.status(200).json(stats);
     } catch (error) {
