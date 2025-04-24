@@ -8,11 +8,18 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "../dist",
-    "rootDir": ".",
+    "rootDir": "..",
     "allowJs": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "baseUrl": "..",
+    "paths": {
+      "@shared/*": ["shared/*"]
+    }
   },
-  "include": ["./**/*.ts"],
+  "include": [
+    "./**/*.ts",
+    "../shared/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 } 

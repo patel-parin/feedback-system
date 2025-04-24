@@ -8,14 +8,11 @@ import {
   formFieldSchema 
 } from "@shared/schema";
 import { z } from "zod";
+import { User } from './models';
 
 // Extend the Express Request type to include user
 interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    isAdmin: boolean;
-  };
+  user?: User;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
