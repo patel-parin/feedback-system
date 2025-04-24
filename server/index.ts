@@ -13,9 +13,16 @@ connectMongoose().catch(console.error);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Add CORS headers for Vercel deployment
+// Add CORS headers
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Update this with your frontend URL in production
+  const allowedOrigins = ['http://localhost:5000', 'https://your-frontend-url.vercel.app'];
+  const origin = req.headers.origin;
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') {
@@ -116,13 +123,10 @@ registerRoutes(app).then(server => {
     setupVite(app, server);
   }
 
-  // Only start the server if not in Vercel
-  if (process.env.VERCEL !== "1") {
-    const port = process.env.PORT || 5000;
-    server.listen(port, () => {
-      log(`Server running on port ${port}`);
-    });
-  }
+  const port = process.env.PORT || 5000;
+  server.listen(port, () => {
+    log(`Server running on port ${port}`);
+  });
 }).catch(error => {
   console.error("Failed to start server:", error);
   process.exit(1);
