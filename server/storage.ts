@@ -80,9 +80,39 @@ function documentToPlain<T>(doc: mongoose.Document | null): T | undefined {
 }
 
 export class MongoDBStorage implements IStorage {
+  private adminUserId: string | null = null;
+
   constructor() {
+    this.initializeAdminUser();
     // Ensure the MongoDB connection is established
     connectMongoose();
+  }
+
+  private async initializeAdminUser() {
+    try {
+      // Try to find existing admin user
+      let adminUser = await User.findOne({ email: 'admin@example.com' });
+      
+      if (!adminUser) {
+        // Create admin user if it doesn't exist
+        adminUser = await User.create({
+          email: 'admin@example.com',
+          password: 'admin123', // In production, use a secure password
+          isAdmin: true
+        });
+      }
+      
+      this.adminUserId = adminUser._id.toString();
+    } catch (error) {
+      console.error('Error initializing admin user:', error);
+    }
+  }
+
+  async getAdminUserId(): Promise<string> {
+    if (!this.adminUserId) {
+      await this.initializeAdminUser();
+    }
+    return this.adminUserId!;
   }
 
   async getUser(id: string): Promise<UserType | undefined> {
@@ -158,8 +188,10 @@ export class MongoDBStorage implements IStorage {
   
   async createFormTemplate(templateData: Omit<InsertFormTemplateType, "accessHash">): Promise<FormTemplateType> {
     try {
+      const adminId = await this.getAdminUserId();
       const template = new FormTemplate({
         ...templateData,
+        createdBy: adminId,
         accessHash: generateAccessHash()
       });
       

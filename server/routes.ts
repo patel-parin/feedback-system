@@ -9,14 +9,31 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 
+// Extend the Express Request type to include user
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    isAdmin: boolean;
+  };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication middleware
-  const authenticateUser = (req: Request, res: Response, next: Function) => {
+  const authenticateUser = (req: AuthenticatedRequest, res: Response, next: Function) => {
     // For a real app, check user session
     // For this demo, we'll implement a simple check
     if (!req.query.isAdmin) {
       return res.status(401).json({ message: 'Unauthorized - Admin access required' });
     }
+    
+    // Set the user object on the request
+    req.user = {
+      id: req.query.userId as string,
+      email: 'admin@example.com', // This would come from the session in a real app
+      isAdmin: true
+    };
+    
     next();
   };
   
@@ -106,10 +123,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.post('/api/forms', authenticateUser, async (req, res) => {
+  app.post('/api/forms', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const formData = createFormTemplateSchema.parse(req.body);
-      const creatorId = String(req.query.userId || 'admin'); // Default to admin if not specified
       
       // Ensure description has a value (MongoDB validation requires it)
       const description = formData.description?.trim() 
@@ -119,7 +135,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newForm = await storage.createFormTemplate({
         ...formData,
         description,
-        createdBy: creatorId,
         active: true
       });
       

@@ -59,7 +59,9 @@ export const insertFormResponseSchema = createInsertSchema(formResponses).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-export type InsertFormTemplate = z.infer<typeof insertFormTemplateSchema>;
+export type InsertFormTemplate = Omit<z.infer<typeof insertFormTemplateSchema>, 'createdBy'> & {
+  createdBy?: string;
+};
 export type FormTemplate = typeof formTemplates.$inferSelect;
 
 export type InsertFormResponse = z.infer<typeof insertFormResponseSchema>;
