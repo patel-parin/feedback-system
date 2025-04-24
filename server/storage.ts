@@ -188,10 +188,20 @@ export class MongoDBStorage implements IStorage {
   
   async createFormTemplate(templateData: Omit<InsertFormTemplateType, "accessHash">): Promise<FormTemplateType> {
     try {
-      const adminId = await this.getAdminUserId();
+      // Get or create admin user
+      let adminUser = await User.findOne({ email: 'admin@example.com' });
+      
+      if (!adminUser) {
+        adminUser = await User.create({
+          email: 'admin@example.com',
+          password: 'admin123',
+          isAdmin: true
+        });
+      }
+
       const template = new FormTemplate({
         ...templateData,
-        createdBy: adminId,
+        createdBy: adminUser._id, // Use the actual MongoDB ObjectId
         accessHash: generateAccessHash()
       });
       

@@ -9,7 +9,10 @@ if (!process.env.MONGODB_URI) {
 }
 
 const MONGODB_URI = process.env.MONGODB_URI as string;
-const options = {};
+const options = {
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+};
 
 // Global variable to store the connection for reuse between serverless function invocations
 let cachedClient: MongoClient | null = null;
@@ -38,38 +41,38 @@ export const connectDB = async () => {
     return db;
   } catch (error) {
     console.error('MongoDB connection error:', error);
-    // Don't call process.exit in serverless environments
     throw new Error('Failed to connect to MongoDB');
   }
 };
 
 // Mongoose connection with connection caching for serverless environments
 export const connectMongoose = async () => {
-  // If we're already connected, reuse the connection
-  if (mongoose.connection.readyState === 1 && isConnected) {
-    console.log('Using existing Mongoose connection');
-    return;
-  }
-
   try {
+    // If we're already connected, reuse the connection
+    if (mongoose.connection.readyState === 1 && isConnected) {
+      console.log('Using existing Mongoose connection');
+      return;
+    }
+
     // Set mongoose options to work well in serverless environments
     mongoose.set("strictQuery", false);
     
-    // Connect to MongoDB
-    await mongoose.connect(MONGODB_URI);
+    // Connect to MongoDB with proper options for serverless
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      // These settings help with Vercel serverless functions
+      maxPoolSize: 10,
+      minPoolSize: 0,
+      maxIdleTimeMS: 10000,
+      waitQueueTimeoutMS: 10000,
+    });
+
     isConnected = true;
     console.log('New Mongoose connection established');
 
-    // Drop collections to remove any incorrect indexes
-    await mongoose.connection.dropCollection('users').catch(() => {
-      console.log('Users collection does not exist, creating new one');
-    });
-    await mongoose.connection.dropCollection('formtemplates').catch(() => {
-      console.log('FormTemplates collection does not exist, creating new one');
-    });
   } catch (error) {
     console.error('Mongoose connection error:', error);
-    // Don't call process.exit in serverless environments
     throw new Error('Failed to connect to MongoDB with Mongoose');
   }
 };
