@@ -2,9 +2,14 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { connectMongoose } from "./mongodb";
-import { User, FormTemplate, FormResponse } from "./models";
+import { User, FormTemplate } from "./models";
 
+// Initialize express app
 const app = express();
+
+// Initialize MongoDB connection
+connectMongoose().catch(console.error);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -19,6 +24,7 @@ app.use((req, res, next) => {
   next();
 });
 
+// Logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -37,27 +43,20 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
       if (logLine.length > 80) {
         logLine = logLine.slice(0, 79) + "…";
       }
-
       log(logLine);
     }
   });
-
   next();
 });
 
-// Initialize MongoDB and add sample data if needed
+// Initialize database with sample data if needed
 async function initializeDatabase() {
-  await connectMongoose();
-  
   try {
-    // Check if we need to initialize with sample data
     const userCount = await User.countDocuments();
     if (userCount === 0) {
-      // Create admin user
       const adminUser = new User({
         email: "admin@example.com",
         password: "admin123",
@@ -65,7 +64,6 @@ async function initializeDatabase() {
       });
       await adminUser.save();
       
-      // Create sample form
       const formTemplate = new FormTemplate({
         title: "Customer Satisfaction Survey",
         description: "Please help us improve our services by completing this short survey.",
@@ -84,71 +82,48 @@ async function initializeDatabase() {
             type: "email",
             required: true,
             placeholder: "your.email@example.com"
-          },
-          {
-            id: "satisfaction",
-            label: "How satisfied are you with our service?",
-            type: "radio",
-            required: true,
-            options: ["Very Satisfied", "Satisfied", "Neutral", "Dissatisfied", "Very Dissatisfied"]
-          },
-          {
-            id: "usage",
-            label: "How often do you use our product/service?",
-            type: "select",
-            required: true,
-            options: ["Daily", "Weekly", "Monthly", "Rarely", "First time"]
-          },
-          {
-            id: "feedback",
-            label: "Any additional feedback or suggestions?",
-            type: "textarea",
-            required: false,
-            placeholder: "Share your thoughts with us..."
           }
         ],
         accessHash: "123456789abcdef0",
         active: true
       });
       await formTemplate.save();
-      
       console.log("Database initialized with sample data");
     }
   } catch (error) {
     console.error("Error initializing database:", error);
-    // Don't throw here, just log the error
   }
 }
 
-// Initialize the database connection before starting the server
+// Initialize database
 initializeDatabase().catch(console.error);
 
-(async () => {
-  try {
-    const server = await registerRoutes(app);
+// Register routes
+registerRoutes(app).then(server => {
+  // Error handling middleware
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    console.error("Error:", err);
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+    res.status(status).json({ message });
+  });
 
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
-      console.error("Error:", err);
-      res.status(status).json({ message });
-    });
-
-    if (app.get("env") === "development") {
-      await setupVite(app, server);
-    } else {
-      serveStatic(app);
-    }
-
-    const port = process.env.PORT || 5000;
-    server.listen({
-      port,
-      host: "0.0.0.0",
-    }, () => {
-      log(`serving on port ${port}`);
-    });
-  } catch (error) {
-    console.error("Error during startup:", error);
-    process.exit(1);
+  // Serve static files in production
+  if (process.env.NODE_ENV === "production") {
+    serveStatic(app);
+  } else {
+    // Setup Vite in development
+    setupVite(app, server);
   }
-})();
+
+  // Only start the server if not in Vercel
+  if (process.env.VERCEL !== "1") {
+    const port = process.env.PORT || 5000;
+    server.listen(port, () => {
+      log(`Server running on port ${port}`);
+    });
+  }
+}).catch(error => {
+  console.error("Failed to start server:", error);
+  process.exit(1);
+});
