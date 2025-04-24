@@ -1,12 +1,20 @@
 import mongoose from 'mongoose';
 import { randomBytes } from 'crypto';
 
-// User schema
-const userSchema = new mongoose.Schema({
+export interface User {
+  _id: mongoose.Types.ObjectId;
+  email: string;
+  password: string;
+  isAdmin: boolean;
+}
+
+export const UserSchema = new mongoose.Schema<User>({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   isAdmin: { type: Boolean, default: false }
 });
+
+export const User = mongoose.model<User>('User', UserSchema);
 
 // Form template schema
 const formTemplateSchema = new mongoose.Schema({
@@ -37,18 +45,10 @@ formTemplateSchema.pre('save', function(next) {
 });
 
 // Export models
-export const User = mongoose.model('User', userSchema);
 export const FormTemplate = mongoose.model('FormTemplate', formTemplateSchema);
 export const FormResponse = mongoose.model('FormResponse', formResponseSchema);
 
 // Type definitions to match our previous PostgreSQL types
-export type UserDocument = mongoose.Document & {
-  id: string;
-  email: string;
-  password: string;
-  isAdmin: boolean;
-};
-
 export type FormTemplateDocument = mongoose.Document & {
   id: string;
   title: string;

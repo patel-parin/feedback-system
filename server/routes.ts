@@ -8,7 +8,7 @@ import {
   formFieldSchema 
 } from "@shared/schema";
 import { z } from "zod";
-import { User } from './models';
+import type { User } from './models';
 
 // Extend the Express Request type to include user
 interface AuthenticatedRequest extends Request {
@@ -129,10 +129,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? formData.description 
         : 'No description provided';
       
+      if (!req.user) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+      
       const newForm = await storage.createFormTemplate({
         ...formData,
         description,
-        active: true
+        active: true,
+        createdBy: req.user._id
       });
       
       res.status(201).json(newForm);
