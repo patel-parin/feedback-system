@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import type { User } from './models';
+import mongoose from 'mongoose';
 
 // Extend the Express Request type to include user
 interface AuthenticatedRequest extends Request {
@@ -26,8 +27,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Set the user object on the request
     req.user = {
-      id: req.query.userId as string,
+      _id: new mongoose.Types.ObjectId(req.query.userId as string),
       email: 'admin@example.com', // This would come from the session in a real app
+      password: '', // This would be hashed in a real app
       isAdmin: true
     };
     
@@ -72,7 +74,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Return user data (excluding password)
       res.status(201).json({
-        id: newUser.id,
+        _id: newUser._id,
         email: newUser.email,
         isAdmin: newUser.isAdmin
       });
@@ -100,7 +102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // In a real app, you would set up a session here
       res.status(200).json({ 
-        id: user.id, 
+        _id: user._id, 
         email: user.email, 
         isAdmin: user.isAdmin 
       });
@@ -111,7 +113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Form Templates Routes (Admin only)
-  app.get('/api/forms', authenticateUser, async (req, res) => {
+  app.get('/api/forms', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const templates = await storage.getAllFormTemplates();
       res.status(200).json(templates);
@@ -150,7 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get('/api/forms/:id', authenticateUser, async (req, res) => {
+  app.get('/api/forms/:id', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const id = req.params.id;
       const template = await storage.getFormTemplateById(id);
@@ -165,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.put('/api/forms/:id', authenticateUser, async (req, res) => {
+  app.put('/api/forms/:id', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const id = req.params.id;
       const updates = req.body;
@@ -182,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.delete('/api/forms/:id', authenticateUser, async (req, res) => {
+  app.delete('/api/forms/:id', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const id = req.params.id;
       const success = await storage.deleteFormTemplate(id);
@@ -198,7 +200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Public form access
-  app.get('/api/public/forms/:hash', logPublicAccess, async (req, res) => {
+  app.get('/api/public/forms/:hash', logPublicAccess, async (req: Request, res: Response) => {
     try {
       const hash = req.params.hash;
       const template = await storage.getFormTemplateByHash(hash);
@@ -220,7 +222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Submit form response
-  app.post('/api/public/forms/:id/submit', logPublicAccess, async (req, res) => {
+  app.post('/api/public/forms/:id/submit', logPublicAccess, async (req: Request, res: Response) => {
     try {
       const formId = req.params.id;
       const template = await storage.getFormTemplateById(formId);
@@ -239,7 +241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const response = await storage.createFormResponse({
         respondent: validatedData.respondent,
         responses: validatedData.responses,
-        formId: formId,
+        formId: new mongoose.Types.ObjectId(formId),
         email: validatedData.email || null
       });
       
@@ -248,6 +250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: error.errors });
       }
+      console.error("Form submission error:", error);
       res.status(500).json({ message: 'Failed to submit form response' });
     }
   });
